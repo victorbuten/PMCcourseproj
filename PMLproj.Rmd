@@ -1,0 +1,76 @@
+---
+title: "Practical machine learning course project"
+author: "VictorButen"
+date: "2 4 2021"
+output: html_document
+---
+## Introduction/Executive Summary
+The goal for this project is to build a machine learning model to predict how an excercise was done using data from six participants doing the exercise for 5 sets of ten repetitions each. Each one of the sets performed the exercise in a different way, with one (class A) being the correct one, and the other ones being common ways of doing the exercise wrongly. 
+```{R}
+
+```
+## Data Cleaning
+I start by loading up the data, as well as the packages I'll be using throughout the analysis.
+```{R}
+## Link for the training dataset: https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv
+training <- read.csv("training.csv")
+
+##Link for the test dataset: https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv
+## I call the test dataset validation as I'll be making my own testing set from the training data
+validation <- read.csv("testing.csv")
+
+library(caret);library(ggplot2);library(rpart);library(maptree)
+
+set.seed(11111)
+
+dim(training)
+
+```
+We see that the training data contains 19622 observations of 160 variables, leading to the first part of the analysis: cleaning up the data. </br>
+I first notice that a lot of columns (like the kurtosis ones) have missing values as "" rather than NA, so I start by changing that. I then remove columns 1:7 as these contain metadata like subject name that don't tell us much about the excercise being performed. Lastly, I then remove the columns that contain NA values. 
+```{R}
+training[training==""] <- NA
+
+## I remove the columns of metadata, then the columns containing NA values
+training <- training[,-c(1:7)]
+training <- training[,colSums(is.na(training))==0]
+
+validation <- validation[,-c(1:7)]
+validation <- validation[,colSums(is.na(validation))==0]
+
+
+dim(training)
+dim(validation)
+```
+As we see from the dim printout, we are not down to 53 variables for both the training and validation dataset. Next, I split the training dataset into two new datasets, one for training and one for testing.
+```{R}
+inTrain <- createDataPartition(training$classe, p=0.75, list=F)
+testing <- training[-inTrain,]
+training <- training[inTrain,]
+```
+## Model training/prediction
+Now that we have our datasets, we can get started making our ML models. Since we're dealing with a classification problem, I'll start off trying to use a classification tree.
+```{R}
+treeModel <- rpart(classe~.,data=training, method="class")
+draw.tree(treeModel, cex=.7)
+pTree <- predict(treeModel, testing, type="class")
+confusionMatrix(pTree, as.factor(testing$classe))
+```
+With an overall accuracy of .75 our model isn't the worst, but it could be better. Since the tree seems to be doing well, I'll move on to either a random forest or a gbm model, both of which use multiple trees as their basis. 
+```{R}
+ctrl <- trainControl(method="repeatedcv", number=5, repeats = 3)
+forestModel <- train(classe~.,data=training, method="rf", trControl=ctrl)
+pForest <- predict(forestModel, testing)
+confusionMatrix(pForest, as.factor(testing$classe))
+```
+Our random forest is doing extremely well with an overall accuracy of .994, and the 95% confidence interval for that accuracy also being entirely above 0.99. Now for the gbm: 
+```{R}
+gbmModel <- train(classe~.,data=training, method="gbm", trControl=ctrl, verbose=F)
+pGbm <- predict(gbmModel, testing)
+confusionMatrix(pGbm, as.factor(testing$classe))
+```
+Our gbm model also has a very high overall accuracy, though not quite as high as the random forest. For my final prediction of the validators I'll therefore be using the random forest, which I'll in turn use to answer the quiz that goes along with this assignment. 
+```{R}
+pValidation <- predict(forestModel, validation)
+pValidation
+```
